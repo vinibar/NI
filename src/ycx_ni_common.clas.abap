@@ -5,6 +5,9 @@ CLASS ycx_ni_common DEFINITION
 
   PUBLIC SECTION.
 
+    "! @parameter textid | Text id
+    "! @parameter previous | Previous
+    "! @parameter iv_text | Message text
     METHODS constructor
       IMPORTING
         !textid   LIKE textid OPTIONAL
@@ -14,6 +17,7 @@ CLASS ycx_ni_common DEFINITION
 
     DATA mv_text TYPE string.
 
+    "! @parameter rv_text | Message text
     METHODS get_default_text
       RETURNING
         VALUE(rv_text) TYPE string .
