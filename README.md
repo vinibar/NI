@@ -1,2 +1,2 @@
-# NI
+# ni
 just another abap library
