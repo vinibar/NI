@@ -6,6 +6,9 @@ CLASS ycx_ni_file_operations DEFINITION
 
   PUBLIC SECTION.
 
+    "! @parameter textid | Text id
+    "! @parameter previous | Previous
+    "! @parameter iv_text | Message text
     METHODS constructor
       IMPORTING
         !textid   LIKE textid OPTIONAL
@@ -19,7 +22,7 @@ ENDCLASS.
 
 
 
-CLASS ycx_ni_file_operations IMPLEMENTATION.
+CLASS YCX_NI_FILE_OPERATIONS IMPLEMENTATION.
 
 
   METHOD constructor ##ADT_SUPPRESS_GENERATION.
