@@ -65,8 +65,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     TRY.
         lo_file_operations->create_directory( iv_dirname = '/tmp/createdbytest' ).
       CATCH ycx_ni_file_operations.
-        cl_abap_unit_assert=>fail(
-            msg    = 'Directory not created' ).
+        cl_abap_unit_assert=>fail( msg = 'Directory not created' ).
     ENDTRY.
 
     TRY.
@@ -91,8 +90,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
             it_content      = lt_content
             iv_overwrite = abap_true ).
       CATCH ycx_ni_file_operations. " Exception Handler for File Operations
-        cl_abap_unit_assert=>fail(
-          msg    = 'File not created' ).
+        cl_abap_unit_assert=>fail( msg = 'File not created' ).
         RETURN.
     ENDTRY.
 
@@ -123,8 +121,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     TRY.
         lo_file_operations->delete_file( iv_full_path = '/tmp/unittest.txt' ).
       CATCH ycx_ni_file_operations.
-        cl_abap_unit_assert=>fail(
-          msg    = 'File not deleted' ).
+        cl_abap_unit_assert=>fail( msg = 'File not deleted' ).
     ENDTRY.
 
   ENDMETHOD.
