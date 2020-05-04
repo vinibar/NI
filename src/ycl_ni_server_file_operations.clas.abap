@@ -6,8 +6,29 @@ CLASS ycl_ni_server_file_operations DEFINITION
 
   PUBLIC SECTION.
 
-    TYPES: tt_file_list TYPE TABLE OF epsfili WITH KEY name.
+    TYPES:
+      ty_error_number TYPE c LENGTH 9,
+      ty_error_msg    TYPE c LENGTH 40,
+      ty_dirname      TYPE c LENGTH 100.
+
+    TYPES:
+      BEGIN OF ty_file_list,
+        dirname      TYPE c LENGTH 100,
+        filename     TYPE c LENGTH 100,
+        type         TYPE c LENGTH 10,
+        len          TYPE p LENGTH 8 DECIMALS 2,
+        owner        TYPE c LENGTH 20,
+        mtime        TYPE p LENGTH 6 DECIMALS 2,
+        mode         TYPE c LENGTH 9,
+        error_number TYPE ty_error_number,
+        error_msg    TYPE ty_error_msg,
+        full_path    TYPE string,
+      END OF ty_file_list.
+    TYPES: tt_file_list TYPE TABLE OF ty_file_list WITH KEY filename.
     TYPES: tt_file_content TYPE TABLE OF string WITH KEY table_line.
+
+    METHODS constructor
+      IMPORTING iv_authority_check TYPE sap_bool DEFAULT abap_false.
 
     "! Open file content
     "! @parameter iv_full_path | Full filename with path
@@ -34,7 +55,9 @@ CLASS ycl_ni_server_file_operations DEFINITION
     "! @parameter rt_files | List of filenames
     "! @raising ycx_ni_file_operations | Operation Failed
     METHODS list_files
-      IMPORTING iv_dirname      TYPE string
+      IMPORTING
+                iv_dirname      TYPE ty_dirname
+                iv_file_mask    TYPE string DEFAULT '*'
       RETURNING VALUE(rt_files) TYPE tt_file_list
       RAISING   ycx_ni_file_operations.
 
@@ -66,6 +89,9 @@ CLASS ycl_ni_server_file_operations DEFINITION
       RAISING   ycx_ni_file_operations.
 
   PROTECTED SECTION.
+
+    DATA mv_authority_check TYPE sap_bool.
+
     "! Handle standard messages returned by sy-subrc on function calls
     "! @raising ycx_ni_file_operations | Operation Failed
     METHODS raise_comm_error_from_sy
@@ -78,7 +104,7 @@ CLASS ycl_ni_server_file_operations DEFINITION
     METHODS split_full_path
       IMPORTING iv_full_path TYPE string
       EXPORTING
-                ev_dirname   TYPE string
+                ev_dirname   TYPE ty_dirname
                 ev_filename  TYPE string.
 
 
@@ -86,7 +112,7 @@ CLASS ycl_ni_server_file_operations DEFINITION
     "! @parameter iv_dirname | Directory path
     "! @parameter rv_valid | Is valid?
     METHODS directory_exists
-      IMPORTING iv_dirname      TYPE string
+      IMPORTING iv_dirname      TYPE ty_dirname
       RETURNING VALUE(rv_valid) TYPE sap_bool.
 
     "! Check if the file exists
@@ -100,7 +126,7 @@ CLASS ycl_ni_server_file_operations DEFINITION
     "! @parameter iv_dirname | Directory path
     "! @raising ycx_ni_file_operations | Operation Failed
     METHODS create_directory
-      IMPORTING iv_dirname TYPE string
+      IMPORTING iv_dirname TYPE ty_dirname
       RAISING   ycx_ni_file_operations.
 
   PRIVATE SECTION.
@@ -111,14 +137,21 @@ CLASS ycl_ni_server_file_operations DEFINITION
     METHODS delete_directory
       IMPORTING
                 iv_recursively TYPE sap_bool OPTIONAL
-                iv_dirname     TYPE string
+                iv_dirname     TYPE ty_dirname
       RAISING   ycx_ni_file_operations.
+
+    METHODS authority_check_c_function
+      RAISING ycx_ni_file_operations.
 
 ENDCLASS.
 
 
 
 CLASS ycl_ni_server_file_operations IMPLEMENTATION.
+
+  METHOD constructor.
+    mv_authority_check = iv_authority_check.
+  ENDMETHOD.
 
   METHOD copy_file.
 
@@ -135,17 +168,8 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
     DATA lv_command TYPE char255.
     DATA lt_result TYPE TABLE OF char255.
 
-    CALL FUNCTION 'AUTHORITY_CHECK_C_FUNCTION'
-      EXPORTING
-        activity         = 'CALL'
-        function         = 'SYSTEM'
-      EXCEPTIONS
-        no_authority     = 1
-        activity_unknown = 2
-        OTHERS           = 3.
-
-    IF sy-subrc <> 0.
-      raise_comm_error_from_sy( ).
+    IF mv_authority_check = abap_true.
+      me->authority_check_c_function(  ).
     ENDIF.
 
     CONCATENATE 'mkdir' iv_dirname INTO lv_command
@@ -168,17 +192,8 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
     DATA lv_command TYPE char255.
     DATA lt_result TYPE TABLE OF char255.
 
-    CALL FUNCTION 'AUTHORITY_CHECK_C_FUNCTION'
-      EXPORTING
-        activity         = 'CALL'
-        function         = 'SYSTEM'
-      EXCEPTIONS
-        no_authority     = 1
-        activity_unknown = 2
-        OTHERS           = 3.
-
-    IF sy-subrc <> 0.
-      raise_comm_error_from_sy( ).
+    IF mv_authority_check = abap_true.
+      me->authority_check_c_function(  ).
     ENDIF.
 
     IF iv_recursively = abap_true.
@@ -200,33 +215,43 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD authority_check_c_function.
+
+    DATA lv_program TYPE authb-program.
+
+    CALL 'AB_GET_CALLER' ID 'PROGRAM' FIELD lv_program.
+
+    AUTHORITY-CHECK OBJECT 'S_C_FUNCT'
+      ID 'PROGRAM'   FIELD lv_program
+      ID 'ACTVT'     FIELD 'CALL'
+      ID 'CFUNCNAME' FIELD 'SYSTEM'.
+
+    IF sy-subrc <> 0.
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = 'Permission denied'.
+    ENDIF.
+
+  ENDMETHOD.
+
   METHOD delete_file.
 
     DATA lv_filename TYPE epsfilnam.
     DATA lv_dirname TYPE epsdirnam.
     DATA ls_find_results TYPE match_result.
 
-    FIND REGEX '[^\\/:*?"<>|\r\n]+$' IN iv_full_path RESULTS ls_find_results.
-    lv_filename = iv_full_path+ls_find_results-offset(ls_find_results-length).
+    IF file_exists( iv_full_path ) <> abap_true.
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = 'File doesnt exist'.
+    ENDIF.
 
-    lv_dirname = iv_full_path.
-    REPLACE REGEX '[^\\/:*?"<>|\r\n]+$' IN lv_dirname WITH space.
-
-    CALL FUNCTION 'EPS_DELETE_FILE'
-      EXPORTING
-        file_name              = lv_filename
-        dir_name               = lv_dirname
-      EXCEPTIONS
-        invalid_eps_subdir     = 1
-        sapgparam_failed       = 2
-        build_directory_failed = 3
-        no_authorization       = 4
-        build_path_failed      = 5
-        delete_failed          = 6
-        OTHERS                 = 7.
+    DELETE DATASET iv_full_path.
 
     IF sy-subrc <> 0.
-      raise_comm_error_from_sy( ).
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = 'Permission denied'.
     ENDIF.
 
   ENDMETHOD.
@@ -234,29 +259,37 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
   METHOD directory_exists.
 
     DATA lv_dirname TYPE btch0000-text80.
+    DATA: lv_error_number TYPE ty_error_number,
+          lv_error_msg    TYPE ty_error_msg.
 
     lv_dirname = iv_dirname.
 
-    CALL FUNCTION 'PFL_CHECK_DIRECTORY'
-      EXPORTING
-        directory                   = lv_dirname
-      EXCEPTIONS
-        pfl_dir_not_exist           = 1              " Directory does not exist
-        pfl_permission_denied       = 2              " No write authorization for directory
-        pfl_cant_build_dataset_name = 3              " Temporary file cannot be generated
-        pfl_file_not_exist          = 4
-        pfl_authorization_missing   = 5
-        OTHERS                      = 6.
+    CALL 'C_DIR_READ_FINISH'
+        ID 'ERRNO'  FIELD lv_error_number
+        ID 'ERRMSG' FIELD lv_error_msg.
+
+    CALL 'C_DIR_READ_START'
+        ID 'DIR'    FIELD lv_dirname
+        ID 'FILE'   FIELD '*'
+        ID 'ERRNO'  FIELD lv_error_number
+        ID 'ERRMSG' FIELD lv_error_msg.
+
     IF sy-subrc = 0.
       rv_valid = abap_true.
     ENDIF.
+
+    CALL 'C_DIR_READ_NEXT'.
+    CALL 'C_DIR_READ_FINISH'.
 
   ENDMETHOD.
 
   METHOD file_exists.
 
-    DATA lv_dirname TYPE string.
-    DATA lv_filename TYPE string.
+    DATA: lv_dirname  TYPE ty_dirname,
+          lv_filename TYPE string.
+
+    DATA: lv_error_number TYPE ty_error_number,
+          lv_error_msg    TYPE ty_error_msg.
 
     split_full_path(
         EXPORTING iv_full_path = iv_full_path
@@ -264,48 +297,87 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
             ev_dirname = lv_dirname
             ev_filename = lv_filename ).
 
-    CALL FUNCTION 'PFL_CHECK_DIRECTORY'
-      EXPORTING
-        directory                   = lv_dirname && space
-        filname                     = lv_filename && space
-      EXCEPTIONS
-        pfl_dir_not_exist           = 1              " Directory does not exist
-        pfl_permission_denied       = 2              " No write authorization for directory
-        pfl_cant_build_dataset_name = 3              " Temporary file cannot be generated
-        pfl_file_not_exist          = 4
-        pfl_authorization_missing   = 5
-        OTHERS                      = 6.
-    IF sy-subrc <> 0.
+
+    CALL 'C_DIR_READ_START' ID 'DIR'    FIELD lv_dirname
+                            ID 'FILE'   FIELD lv_filename
+                            ID 'ERRNO'  FIELD lv_error_number
+                            ID 'ERRMSG' FIELD lv_error_msg.
+
+    IF sy-subrc = 0.
       rv_valid = abap_true.
     ENDIF.
 
+    CALL 'C_DIR_READ_NEXT'.
+    CALL 'C_DIR_READ_FINISH'.
 
   ENDMETHOD.
 
   METHOD list_files.
 
-    DATA lv_directory TYPE epsdirnam.
+    DATA: lv_error_number TYPE ty_error_number,
+          lv_error_msg    TYPE ty_error_msg.
 
-    lv_directory = iv_dirname.
+    DATA ls_file LIKE LINE OF rt_files.
+    DATA lv_dirname LIKE iv_dirname.
 
-    CALL FUNCTION 'EPS_GET_DIRECTORY_LISTING'
-      EXPORTING
-        dir_name               = lv_directory
-      TABLES
-        dir_list               = rt_files
-      EXCEPTIONS
-        invalid_eps_subdir     = 1
-        sapgparam_failed       = 2
-        build_directory_failed = 3
-        no_authorization       = 4
-        read_directory_failed  = 5
-        too_many_read_errors   = 6
-        empty_directory_list   = 7
-        OTHERS                 = 8.
+    IF directory_exists( iv_dirname ) <> abap_true.
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = 'Invalid path'.
+    ENDIF.
+
+    CALL 'C_DIR_READ_FINISH'.
+    CALL 'C_DIR_READ_START'
+        ID 'DIR'    FIELD iv_dirname
+        ID 'FILE'   FIELD iv_file_mask
+        ID 'ERRNO'  FIELD lv_error_number
+        ID 'ERRMSG' FIELD lv_error_msg.
 
     IF sy-subrc <> 0.
-      raise_comm_error_from_sy( ).
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = 'Cant list files'.
     ENDIF.
+
+    DO.
+
+      ls_file-dirname = iv_dirname.
+      CALL 'C_DIR_READ_NEXT'
+            ID 'TYPE'   FIELD ls_file-type
+            ID 'NAME'   FIELD ls_file-filename
+            ID 'LEN'    FIELD ls_file-len
+            ID 'OWNER'  FIELD ls_file-owner
+            ID 'MTIME'  FIELD ls_file-mtime
+            ID 'MODE'   FIELD ls_file-mode
+            ID 'ERRNO'  FIELD ls_file-error_number
+            ID 'ERRMSG' FIELD ls_file-error_msg.
+
+      IF sy-subrc = 1.
+        CALL 'C_DIR_READ_FINISH'.
+        EXIT.
+      ENDIF.
+
+      " ensures that there's a slash at the end of dirname
+      lv_dirname = iv_dirname.
+      FIND REGEX '\/$' IN iv_dirname.
+      IF sy-subrc = 0.
+        CONCATENATE lv_dirname '/' INTO lv_dirname.
+      ENDIF.
+
+      " Generate fullpath from dirname and filename
+      CONCATENATE lv_dirname ls_file-filename INTO ls_file-full_path.
+
+      APPEND ls_file TO rt_files.
+      CLEAR ls_file.
+
+    ENDDO.
+
+    CALL 'C_DIR_READ_FINISH'
+          ID 'ERRNO'  FIELD lv_error_number
+          ID 'ERRMSG' FIELD lv_error_msg.
+
+    SORT rt_files BY filename.
+    DELETE rt_files WHERE type NS 'file'.
 
   ENDMETHOD.
 
@@ -335,14 +407,52 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   METHOD read_file.
 
-    cl_rsan_ut_appserv_file_reader=>appserver_file_read(
-        EXPORTING i_filename = iv_full_path
-        CHANGING c_data_tab = rt_content
-        EXCEPTIONS
-            open_failed  = 1
-            read_failed  = 2
-            close_failed = 3
-            OTHERS       = 4 ).
+    DATA ls_content LIKE LINE OF rt_content.
+    DATA lv_msg TYPE string.
+
+    DATA: lx_file_access_error TYPE REF TO cx_sy_file_access_error,
+          lx_file_close        TYPE REF TO cx_sy_file_close.
+
+    OPEN DATASET iv_full_path FOR INPUT IN TEXT MODE ENCODING DEFAULT.
+    IF sy-subrc <> 0.
+      CONCATENATE 'Cant open' iv_full_path INTO lv_msg
+          SEPARATED BY space.
+
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = lv_msg.
+    ENDIF.
+
+    TRY.
+        DO.
+          READ DATASET iv_full_path INTO ls_content.
+          IF sy-subrc <> 0.
+            EXIT.
+          ENDIF.
+
+          APPEND ls_content TO rt_content.
+          IF sy-subrc NE 0.
+            RAISE EXCEPTION TYPE ycx_ni_file_operations
+              EXPORTING
+                iv_text = 'Cant insert line into content table'.
+          ENDIF.
+        ENDDO.
+      CATCH cx_sy_file_access_error INTO lx_file_access_error.
+
+        lv_msg = lx_file_access_error->get_text( ).
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
+
+    TRY.
+        CLOSE DATASET iv_full_path.
+      CATCH cx_sy_file_close INTO lx_file_close.
+        lv_msg = lx_file_close->get_text( ).
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
 
   ENDMETHOD.
 
@@ -357,7 +467,13 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   METHOD write_file.
 
-    DATA lv_dirname TYPE string.
+    DATA lv_dirname TYPE ty_dirname.
+    DATA lv_msg TYPE string.
+
+    DATA ls_content LIKE LINE OF it_content.
+
+    DATA: lx_file_access_error TYPE REF TO cx_sy_file_access_error,
+          lx_file_close        TYPE REF TO cx_sy_file_close.
 
     IF iv_overwrite = abap_true.
       split_full_path(
@@ -371,20 +487,42 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
       ENDIF.
     ENDIF.
 
-    cl_rsan_ut_appserv_file_writer=>appserver_file_write(
-           EXPORTING
-             i_filename      = iv_full_path
-             i_overwrite     = iv_overwrite
-             i_data_tab      = it_content
-           EXCEPTIONS
-             open_failed     = 1
-             write_failed    = 2
-             close_failed    = 3
-             OTHERS          = 4 ).
+    IF iv_overwrite = abap_true.
+      OPEN DATASET iv_full_path FOR OUTPUT IN TEXT MODE ENCODING UTF-8 WITH BYTE-ORDER MARK.
+    ELSE.
+      OPEN DATASET iv_full_path FOR APPENDING IN TEXT MODE ENCODING DEFAULT.
+    ENDIF.
 
     IF sy-subrc <> 0.
-      raise_comm_error_from_sy( ).
+      CONCATENATE 'Cant open' iv_full_path INTO lv_msg
+          SEPARATED BY space.
+
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = lv_msg.
     ENDIF.
+
+    TRY.
+        LOOP AT it_content INTO ls_content.
+          TRANSFER ls_content TO iv_full_path.
+        ENDLOOP.
+
+      CATCH cx_sy_file_access_error INTO lx_file_access_error.
+        lv_msg = lx_file_access_error->get_text( ).
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
+
+    TRY.
+        CLOSE DATASET iv_full_path.
+      CATCH cx_sy_file_close INTO lx_file_close.
+        lv_msg = lx_file_close->get_text( ).
+
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
 
   ENDMETHOD.
 ENDCLASS.

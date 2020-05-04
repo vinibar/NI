@@ -19,7 +19,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
   METHOD split_full_path.
 
     DATA lo_file_operations TYPE REF TO ycl_ni_server_file_operations.
-    DATA lv_dirname TYPE string.
+    DATA lv_dirname TYPE ycl_ni_server_file_operations=>ty_dirname.
     DATA lv_filename TYPE string.
 
     CREATE OBJECT lo_file_operations.
@@ -65,7 +65,8 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     TRY.
         lo_file_operations->create_directory( iv_dirname = '/tmp/createdbytest' ).
       CATCH ycx_ni_file_operations.
-        cl_abap_unit_assert=>fail( msg = 'Directory not created' ).
+        cl_abap_unit_assert=>fail(
+            msg    = 'Directory not created' ).
     ENDTRY.
 
     TRY.
@@ -90,7 +91,8 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
             it_content      = lt_content
             iv_overwrite = abap_true ).
       CATCH ycx_ni_file_operations. " Exception Handler for File Operations
-        cl_abap_unit_assert=>fail( msg = 'File not created' ).
+        cl_abap_unit_assert=>fail(
+          msg    = 'File not created' ).
         RETURN.
     ENDTRY.
 
@@ -121,7 +123,8 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     TRY.
         lo_file_operations->delete_file( iv_full_path = '/tmp/unittest.txt' ).
       CATCH ycx_ni_file_operations.
-        cl_abap_unit_assert=>fail( msg = 'File not deleted' ).
+        cl_abap_unit_assert=>fail(
+          msg    = 'File not deleted' ).
     ENDTRY.
 
   ENDMETHOD.
@@ -150,8 +153,8 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     ENDTRY.
 
     READ TABLE lt_content INTO ls_content INDEX 1.
-    IF sy-subrc <> 0 OR ls_content <> `line 1`.
-      cl_abap_unit_assert=>fail( msg = 'File opened but invalid content' ).
+    IF ls_content NS 'line 1'.
+      cl_abap_unit_assert=>fail( msg = 'Unexcepted content' ).
     ENDIF.
 
   ENDMETHOD.
@@ -181,7 +184,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     ENDTRY.
 
     READ TABLE lt_list INTO ls_list INDEX 1.
-    IF sy-subrc <> 0 OR ls_list-name <> 'unittest.txt'.
+    IF sy-subrc <> 0 OR ls_list-filename <> 'unittest.txt'.
       cl_abap_unit_assert=>fail( msg = 'Cant list files in directory' ).
     ENDIF.
 
