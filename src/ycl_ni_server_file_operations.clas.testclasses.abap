@@ -80,13 +80,13 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
   METHOD write_file.
 
     DATA lo_file_operations TYPE REF TO ycl_ni_server_file_operations.
-    DATA lt_content TYPE lo_file_operations->tt_file_content.
+    DATA lt_content TYPE lo_file_operations->tt_file_content_txt.
 
     CREATE OBJECT lo_file_operations.
     APPEND 'line 1' TO lt_content.
 
     TRY.
-        lo_file_operations->write_file(
+        lo_file_operations->write_txt_file(
             iv_full_path = '/tmp/unittest.txt'
             it_content      = lt_content
             iv_overwrite = abap_true ).
@@ -106,13 +106,13 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
   METHOD delete_file.
 
     DATA lo_file_operations TYPE REF TO ycl_ni_server_file_operations.
-    DATA lt_content TYPE lo_file_operations->tt_file_content.
+    DATA lt_content TYPE lo_file_operations->tt_file_content_txt.
 
     CREATE OBJECT lo_file_operations.
     APPEND 'line 1' TO lt_content.
 
     TRY.
-        lo_file_operations->write_file(
+        lo_file_operations->write_txt_file(
             iv_full_path = '/tmp/unittest.txt'
             it_content      = lt_content
             iv_overwrite = abap_true ).
@@ -132,14 +132,14 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
   METHOD read_file.
 
     DATA lo_file_operations TYPE REF TO ycl_ni_server_file_operations.
-    DATA lt_content TYPE lo_file_operations->tt_file_content.
+    DATA lt_content TYPE lo_file_operations->tt_file_content_txt.
     DATA ls_content LIKE LINE OF lt_content.
 
     CREATE OBJECT lo_file_operations.
     APPEND 'line 1' TO lt_content.
 
     TRY.
-        lo_file_operations->write_file(
+        lo_file_operations->write_txt_file(
             iv_full_path = '/tmp/unittest.txt'
             it_content      = lt_content
             iv_overwrite = abap_true ).
@@ -147,7 +147,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     ENDTRY.
 
     TRY.
-        lt_content = lo_file_operations->read_file( '/tmp/unittest.txt' ).
+        lt_content = lo_file_operations->read_txt_file( '/tmp/unittest.txt' ).
       CATCH ycx_ni_file_operations. " Exception Handler for File Operations
         cl_abap_unit_assert=>fail( msg = 'Cant open the file' ).
     ENDTRY.
@@ -162,7 +162,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
   METHOD list_files.
 
     DATA lo_file_operations TYPE REF TO ycl_ni_server_file_operations.
-    DATA lt_content TYPE ycl_ni_server_file_operations=>tt_file_content.
+    DATA lt_content TYPE ycl_ni_server_file_operations=>tt_file_content_txt.
     DATA lt_list TYPE ycl_ni_server_file_operations=>tt_file_list.
     DATA ls_list LIKE LINE OF lt_list.
 
@@ -170,7 +170,7 @@ CLASS ltcl_test_file_operations IMPLEMENTATION.
     APPEND 'line 1' TO lt_content.
 
     TRY.
-        lo_file_operations->write_file(
+        lo_file_operations->write_txt_file(
             iv_full_path = '/tmp/dirUnitTest/unittest.txt'
             it_content      = lt_content
             iv_overwrite = abap_true ).

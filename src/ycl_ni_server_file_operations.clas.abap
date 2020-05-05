@@ -1,4 +1,7 @@
 "! Helper class for file server manipulation
+"! Developed by @vinibar at April 2020 (covid-19 lockdown)
+"! License: MIT https://raw.githubusercontent.com/vinibar/ni/master/LICENSE
+"! Copyright (c) 2020 ni Contributors
 CLASS ycl_ni_server_file_operations DEFINITION
   PUBLIC
   FINAL
@@ -25,28 +28,49 @@ CLASS ycl_ni_server_file_operations DEFINITION
         full_path    TYPE string,
       END OF ty_file_list.
     TYPES: tt_file_list TYPE TABLE OF ty_file_list WITH KEY filename.
-    TYPES: tt_file_content TYPE TABLE OF string WITH KEY table_line.
+    TYPES: tt_file_content_txt TYPE TABLE OF string WITH KEY table_line.
+    TYPES: tt_file_content_bin TYPE TABLE OF xstring WITH KEY table_line.
 
     METHODS constructor
       IMPORTING iv_authority_check TYPE sap_bool DEFAULT abap_false.
 
-    "! Open file content
+    "! Open text file content
     "! @parameter iv_full_path | Full filename with path
     "! @parameter rt_content | File content
     "! @raising ycx_ni_file_operations | Operation Failed
-    METHODS read_file
+    METHODS read_txt_file
       IMPORTING iv_full_path      TYPE string
-      RETURNING VALUE(rt_content) TYPE tt_file_content
+      RETURNING VALUE(rt_content) TYPE tt_file_content_txt
       RAISING   ycx_ni_file_operations.
 
-    "! Write content to file
+    "! Open binary file content
+    "! @parameter iv_full_path | Full filename with path
+    "! @parameter rt_content | File content
+    "! @raising ycx_ni_file_operations | Operation Failed
+    METHODS read_bin_file
+      IMPORTING iv_full_path      TYPE string
+      RETURNING VALUE(rt_content) TYPE tt_file_content_bin
+      RAISING   ycx_ni_file_operations.
+
+    "! Write text content to file
     "! @parameter iv_full_path | Full filename with path
     "! @parameter it_content | File content
     "! @raising ycx_ni_file_operations | Operation Failed
-    METHODS write_file
+    METHODS write_txt_file
       IMPORTING
                 iv_full_path TYPE string
-                it_content   TYPE tt_file_content
+                it_content   TYPE tt_file_content_txt
+                iv_overwrite TYPE sap_bool OPTIONAL
+      RAISING   ycx_ni_file_operations.
+
+    "! Write binary content to file
+    "! @parameter iv_full_path | Full filename with path
+    "! @parameter it_content | File content
+    "! @raising ycx_ni_file_operations | Operation Failed
+    METHODS write_bin_file
+      IMPORTING
+                iv_full_path TYPE string
+                it_content   TYPE tt_file_content_bin
                 iv_overwrite TYPE sap_bool OPTIONAL
       RAISING   ycx_ni_file_operations.
 
@@ -64,11 +88,13 @@ CLASS ycl_ni_server_file_operations DEFINITION
     "! Copy file
     "! @parameter iv_source_full_path | Source full filename with path
     "! @parameter iv_dest_full_path | Destination full filename with path
+    "! @parameter iv_overwrite | Overwrite destination file? 'X' = Yes, '' = No
     "! @raising ycx_ni_file_operations | Operation Failed
     METHODS copy_file
       IMPORTING
                 iv_source_full_path TYPE string
                 iv_dest_full_path   TYPE string
+                iv_overwrite        TYPE sap_bool OPTIONAL
       RAISING   ycx_ni_file_operations.
 
     "! Delete file
@@ -81,11 +107,13 @@ CLASS ycl_ni_server_file_operations DEFINITION
     "! Move file
     "! @parameter iv_source_full_path | Source full filename with path
     "! @parameter iv_dest_full_path | Destination full filename with path
+    "! @parameter iv_overwrite | Overwrite destination file? 'X' = Yes, '' = No
     "! @raising ycx_ni_file_operations | Operation Failed
     METHODS move_file
       IMPORTING
                 iv_source_full_path TYPE string
                 iv_dest_full_path   TYPE string
+                iv_overwrite        TYPE sap_bool OPTIONAL
       RAISING   ycx_ni_file_operations.
 
   PROTECTED SECTION.
@@ -149,22 +177,29 @@ ENDCLASS.
 
 CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
+
+
   METHOD constructor.
     mv_authority_check = iv_authority_check.
   ENDMETHOD.
 
+
+
   METHOD copy_file.
 
-    DATA lt_file_contents TYPE TABLE OF string.
-    lt_file_contents = read_file( iv_source_full_path ).
-    write_file(
+    DATA lt_file_contents TYPE tt_file_content_bin.
+    lt_file_contents = read_bin_file( iv_source_full_path ).
+    write_bin_file(
       iv_full_path = iv_dest_full_path
-      it_content = lt_file_contents ).
+      it_content = lt_file_contents
+      iv_overwrite = iv_overwrite ).
 
   ENDMETHOD.
 
 
+
   METHOD create_directory.
+
     DATA lv_command TYPE char255.
     DATA lt_result TYPE TABLE OF char255.
 
@@ -184,8 +219,9 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
           iv_text = 'Directory not created'.
     ENDIF.
 
-
   ENDMETHOD.
+
+
 
   METHOD delete_directory.
 
@@ -215,6 +251,8 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+
   METHOD authority_check_c_function.
 
     DATA lv_program TYPE authb-program.
@@ -233,6 +271,8 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
     ENDIF.
 
   ENDMETHOD.
+
+
 
   METHOD delete_file.
 
@@ -255,6 +295,8 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
     ENDIF.
 
   ENDMETHOD.
+
+
 
   METHOD directory_exists.
 
@@ -283,6 +325,8 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+
   METHOD file_exists.
 
     DATA: lv_dirname  TYPE ty_dirname,
@@ -291,26 +335,29 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
     DATA: lv_error_number TYPE ty_error_number,
           lv_error_msg    TYPE ty_error_msg.
 
+    DATA lt_files TYPE tt_file_list.
+
     split_full_path(
         EXPORTING iv_full_path = iv_full_path
         IMPORTING
             ev_dirname = lv_dirname
             ev_filename = lv_filename ).
 
+    TRY.
+        lt_files = list_files( iv_dirname  = lv_dirname iv_file_mask = lv_filename ).
+      CATCH ycx_ni_file_operations.
+        "nothing to do
+    ENDTRY.
 
-    CALL 'C_DIR_READ_START' ID 'DIR'    FIELD lv_dirname
-                            ID 'FILE'   FIELD lv_filename
-                            ID 'ERRNO'  FIELD lv_error_number
-                            ID 'ERRMSG' FIELD lv_error_msg.
-
+    READ TABLE lt_files TRANSPORTING NO FIELDS
+        WITH KEY filename = lv_filename.
     IF sy-subrc = 0.
       rv_valid = abap_true.
     ENDIF.
 
-    CALL 'C_DIR_READ_NEXT'.
-    CALL 'C_DIR_READ_FINISH'.
-
   ENDMETHOD.
+
+
 
   METHOD list_files.
 
@@ -381,18 +428,24 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+
   METHOD move_file.
 
     copy_file(
       iv_source_full_path = iv_source_full_path
-      iv_dest_full_path = iv_dest_full_path ).
+      iv_dest_full_path = iv_dest_full_path
+      iv_overwrite = iv_overwrite  ).
 
     delete_file( iv_source_full_path ).
 
   ENDMETHOD.
 
+
+
   METHOD raise_comm_error_from_sy.
-    DATA: lv_error_msg TYPE string.
+
+    DATA lv_error_msg TYPE string.
 
     MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
             WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
@@ -403,9 +456,12 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
     RAISE EXCEPTION TYPE ycx_ni_file_operations
       EXPORTING
         iv_text = lv_error_msg.
+
   ENDMETHOD.
 
-  METHOD read_file.
+
+
+  METHOD read_txt_file.
 
     DATA ls_content LIKE LINE OF rt_content.
     DATA lv_msg TYPE string.
@@ -456,7 +512,64 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+
+  METHOD read_bin_file.
+
+    DATA ls_content LIKE LINE OF rt_content.
+    DATA lv_msg TYPE string.
+    DATA lv_length TYPE i VALUE 1.
+
+    DATA: lx_file_access_error TYPE REF TO cx_sy_file_access_error,
+          lx_file_close        TYPE REF TO cx_sy_file_close.
+
+    OPEN DATASET iv_full_path FOR INPUT IN BINARY MODE.
+    IF sy-subrc <> 0.
+      CONCATENATE 'Cant open' iv_full_path INTO lv_msg
+          SEPARATED BY space.
+
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = lv_msg.
+    ENDIF.
+
+    TRY.
+        WHILE lv_length > 0.
+          READ DATASET iv_full_path INTO ls_content LENGTH lv_length.
+          IF sy-subrc <> 0.
+            EXIT.
+          ENDIF.
+
+          APPEND ls_content TO rt_content.
+          IF sy-subrc NE 0.
+            RAISE EXCEPTION TYPE ycx_ni_file_operations
+              EXPORTING
+                iv_text = 'Cant insert line into content table'.
+          ENDIF.
+        ENDWHILE.
+      CATCH cx_sy_file_access_error INTO lx_file_access_error.
+
+        lv_msg = lx_file_access_error->get_text( ).
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
+
+    TRY.
+        CLOSE DATASET iv_full_path.
+      CATCH cx_sy_file_close INTO lx_file_close.
+        lv_msg = lx_file_close->get_text( ).
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+
   METHOD split_full_path.
+
     DATA ls_find_results TYPE match_result.
     FIND REGEX '[^\\/:*?"<>|\r\n]+$' IN iv_full_path RESULTS ls_find_results.
     ev_filename = iv_full_path+ls_find_results-offset(ls_find_results-length).
@@ -465,7 +578,9 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD write_file.
+
+
+  METHOD write_txt_file.
 
     DATA lv_dirname TYPE ty_dirname.
     DATA lv_msg TYPE string.
@@ -525,4 +640,75 @@ CLASS ycl_ni_server_file_operations IMPLEMENTATION.
     ENDTRY.
 
   ENDMETHOD.
+
+
+
+  METHOD write_bin_file.
+
+    DATA lv_dirname TYPE ty_dirname.
+    DATA lv_msg TYPE string.
+    DATA lv_file_exists TYPE sap_bool.
+
+    DATA ls_content LIKE LINE OF it_content.
+
+    DATA: lx_file_access_error TYPE REF TO cx_sy_file_access_error,
+          lx_file_close        TYPE REF TO cx_sy_file_close.
+
+    IF iv_overwrite = abap_true.
+      split_full_path(
+        EXPORTING
+          iv_full_path = iv_full_path
+        IMPORTING
+          ev_dirname   = lv_dirname ).
+
+      IF directory_exists( lv_dirname ) <> abap_true.
+        create_directory( lv_dirname ).
+      ENDIF.
+    ENDIF.
+
+    lv_file_exists = file_exists( iv_full_path ).
+
+    IF lv_file_exists = abap_true AND iv_overwrite = abap_false.
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = 'Cant overwrite file'.
+    ENDIF.
+
+    OPEN DATASET iv_full_path FOR OUTPUT IN BINARY MODE.
+
+    IF sy-subrc <> 0.
+      CONCATENATE 'Cant open' iv_full_path INTO lv_msg
+          SEPARATED BY space.
+
+      RAISE EXCEPTION TYPE ycx_ni_file_operations
+        EXPORTING
+          iv_text = lv_msg.
+    ENDIF.
+
+    TRY.
+        LOOP AT it_content INTO ls_content.
+          TRANSFER ls_content TO iv_full_path.
+        ENDLOOP.
+
+      CATCH cx_sy_file_access_error INTO lx_file_access_error.
+        lv_msg = lx_file_access_error->get_text( ).
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
+
+    TRY.
+        CLOSE DATASET iv_full_path.
+      CATCH cx_sy_file_close INTO lx_file_close.
+        lv_msg = lx_file_close->get_text( ).
+
+        RAISE EXCEPTION TYPE ycx_ni_file_operations
+          EXPORTING
+            iv_text = lv_msg.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+
 ENDCLASS.
