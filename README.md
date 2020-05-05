@@ -6,6 +6,8 @@ O objetivo de __ni__ é ser "ABAP puro". Dessa forma, não há dependência de m
 
 Versão ABAP: 702 ou maior.
 
+![alt Cavaleiros que dizem Ni](https://vignette.wikia.nocookie.net/villains/images/e/ed/Originalni.jpg)
+
 ## Instalação
 
 Utilize o [abapGit](https://github.com/larshp/abapGit).
