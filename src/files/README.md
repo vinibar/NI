@@ -1,4 +1,4 @@
-# ni Arquivos
+# ni Files
 
 Objetos utilitários para manipulação de arquivos em ABAP.
 
