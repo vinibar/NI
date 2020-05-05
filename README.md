@@ -1,6 +1,8 @@
 # ni
 
-Ni é um pacote de objetos que ajudarão programadores ABAP em suas tarefas do dia-a-dia. Evite "reinventar a roda" com nossas classes utilitárias que irão resolver problemas corriquerios. 
+__ni__ é um pacote de objetos que ajudarão programadores ABAP em suas tarefas do dia-a-dia. Evite "reinventar a roda" com classes utilitárias que irão resolver problemas corriquerios. 
+
+O objetivo de __ni__ é ser "ABAP puro". Dessa forma, não há dependência de módulos de função ou classes standard.
 
 Versão ABAP: 702 ou maior.
 
@@ -8,13 +10,7 @@ Versão ABAP: 702 ou maior.
 
 Utilize o [abapGit](https://github.com/larshp/abapGit).
 
-Dúvidas, problemas e sugestões devem ser feitas através da seção [Issues](https://github.com/vinibar/ni/issues) do Repositório.
+Dúvidas, problemas e sugestões devem ser feitas através da seção [Issues](https://github.com/vinibar/ni/issues) do Repositório, especificando o nome do objeto no título.
 
 ## Utilitários
-### YCL_NI_SERVER_FILE_OPERATIONS - Operações para arquivos no servidor
-Operações para arquivos no application server:
-* Leitura de arquivo
-* Gravação de arquivo
-* Listagem de arquivos em um diretório
-* Copiar arquivo
-* Mover arquivo
+  - ### [ni Files](https://github.com/vinibar/ni/tree/master/src/files) - Manipulação de arquivos em ABAP
