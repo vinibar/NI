@@ -5,7 +5,7 @@
    <VSEOCLASS>
     <CLSNAME>YCL_NI_EXCEPTION_UTIL</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>Collection of utilitis for exceptions</DESCRIPT>
+    <DESCRIPT>Collection of utilities for exceptions</DESCRIPT>
     <STATE>1</STATE>
     <CLSCCINCL>X</CLSCCINCL>
     <FIXPT>X</FIXPT>
